@@ -55,7 +55,11 @@ finish_feedback() {
 
 # The binary `just mockup` builds; any build answers `browser feedback`.
 root=$(cd "$(dirname "$0")/../../../.." && pwd)
-app=$root/target/debug/sheprd
+# A machine-local .cargo/config.toml may move Cargo's target directory.
+target=$(cd "$root" && cargo metadata --no-deps --format-version 1 2>/dev/null \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])' 2>/dev/null) \
+    || target=$root/target
+app=$target/debug/sheprd
 if [ -n "${HERDR_PANE_ID:-}" ] && [ -x "$app" ]; then
     output=$(mktemp -d "${TMPDIR:-/tmp}/gpui-feedback.XXXXXX")
     args=(browser feedback)

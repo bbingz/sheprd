@@ -1,3 +1,7 @@
+# Prints Cargo's target directory, wherever `build.target-dir` or
+# CARGO_TARGET_DIR puts it. A command, so only recipes that use it run Cargo.
+cargo_target_dir := 'cargo metadata --no-deps --format-version 1 | python3 -c "import json, sys; print(json.load(sys.stdin)[\"target_directory\"])"'
+
 default:
     @just --list
 
@@ -18,7 +22,7 @@ run *args:
     # Network access (Bonjour, SSH hosts on the LAN) only for an app it
     # launched, and denies a binary started from a shell without asking.
     # Output still reaches this terminal; Ctrl-C quits the app.
-    app="$PWD/target/release/Sheprd.app"
+    app="$({{cargo_target_dir}})/release/Sheprd.app"
     out=/dev/null
     if [ -t 0 ]; then out=$(tty); fi
     env_args=()
@@ -36,7 +40,8 @@ run-debug *args:
         exec cargo run --locked -p sheprd-gpui -- {{args}}
     fi
     {{just_executable()}} bundle debug
-    exec target/debug/Sheprd.app/Contents/MacOS/sheprd {{args}}
+    target=$({{cargo_target_dir}})
+    exec "$target/debug/Sheprd.app/Contents/MacOS/sheprd" {{args}}
 
 format:
     cargo fmt --all
@@ -100,7 +105,7 @@ test-sidebar:
 # Native hover/scroll CPU scene budget in milliseconds, calibrated for this machine.
 test-perf budget="30":
     cargo build --locked --release -p sheprd-gpui --features integration-test
-    HERDR_PERF_P95_MS="{{budget}}" target/release/sheprd --performance-test
+    HERDR_PERF_P95_MS="{{budget}}" "$({{cargo_target_dir}})/release/sheprd" --performance-test
 
 # Compare UI variants written as GPUI code in `file` (the built-in demo when
 # empty) in a native window. "Send to agent" types the notes into the calling
@@ -120,7 +125,8 @@ mockup file="" feedback="" capture="":
     args=(--mockup)
     if [ -n "$feedback" ]; then args+=(--feedback "$feedback"); fi
     if [ -n "$capture" ]; then args+=(--capture "$capture"); fi
-    exec target/debug/sheprd "${args[@]}"
+    target=$({{cargo_target_dir}})
+    exec "$target/debug/sheprd" "${args[@]}"
 
 build-release:
     cargo build --locked --release -p sheprd-gpui -p sheprd-acp -p sheprd-automate -p sheprd-remote-control
@@ -173,32 +179,33 @@ bundle profile="release" features="":
         debug) flags= ;;
         *) echo "Unknown profile: {{profile}} (release or debug)" >&2; exit 2 ;;
     esac
-    app=target/{{profile}}/Sheprd.app
-    cargo build --locked $flags --target-dir target -p sheprd-gpui --features "{{features}}"
-    cargo build --locked $flags --target-dir target -p sheprd-acp -p sheprd-automate -p sheprd-remote-control
+    target=$({{cargo_target_dir}})
+    app=$target/{{profile}}/Sheprd.app
+    cargo build --locked $flags --target-dir "$target" -p sheprd-gpui --features "{{features}}"
+    cargo build --locked $flags --target-dir "$target" -p sheprd-acp -p sheprd-automate -p sheprd-remote-control
     mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
     # Replace the executables rather than rewrite them in place: macOS keeps
     # a signed file's old signature with its inode, so reading the rewritten
     # pages kills the reader, and a chat still running the old sheprd-acp
     # keeps its own copy.
     rm -f "$app/Contents/MacOS/sheprd" "$app/Contents/MacOS/sheprd-acp" "$app/Contents/MacOS/sheprd-automate" "$app/Contents/MacOS/sheprd-remote-control" "$app/Contents/MacOS/sheprd-nearby"
-    cp target/{{profile}}/sheprd "$app/Contents/MacOS/sheprd"
+    cp "$target/{{profile}}/sheprd" "$app/Contents/MacOS/sheprd"
     # The automation daemon, found beside the app's executable.
-    cp target/{{profile}}/sheprd-automate "$app/Contents/MacOS/sheprd-automate"
+    cp "$target/{{profile}}/sheprd-automate" "$app/Contents/MacOS/sheprd-automate"
     codesign --force --sign - "$app/Contents/MacOS/sheprd-automate"
     # Chats the app starts run the sheprd-acp beside its executable.
-    cp target/{{profile}}/sheprd-acp "$app/Contents/MacOS/sheprd-acp"
+    cp "$target/{{profile}}/sheprd-acp" "$app/Contents/MacOS/sheprd-acp"
     # Remote control runs the sheprd-remote-control beside it as a user service.
-    cp target/{{profile}}/sheprd-remote-control "$app/Contents/MacOS/sheprd-remote-control"
+    cp "$target/{{profile}}/sheprd-remote-control" "$app/Contents/MacOS/sheprd-remote-control"
     # Bluetooth pairing and presence run the Swift helper beside it; without
     # it the app pairs over the network only.
     xcrun swiftc -O -swift-version 6 macos/sheprd-nearby/main.swift macos/sheprd-nearby/Framing.swift \
         macos/sheprd-nearby/Bonjour.swift -o "$app/Contents/MacOS/sheprd-nearby"
     # Herdr 2 terminals run in the pinned herdr-core beside it, as releases
     # bundle it. Fetched once per profile; an offline build goes on without.
-    core=target/{{profile}}/herdr-core
+    core=$target/{{profile}}/herdr-core
     if [ ! -f "$core" ]; then
-        python3 scripts/release/fetch-herdr-core.py "$(rustc -vV | sed -n 's/^host: //p')" target/{{profile}} >/dev/null \
+        python3 scripts/release/fetch-herdr-core.py "$(rustc -vV | sed -n 's/^host: //p')" "$target/{{profile}}" >/dev/null \
             || echo "warning: no herdr-core bundled; Herdr 2 terminals need one on PATH" >&2
     fi
     rm -f "$app/Contents/MacOS/herdr-core"

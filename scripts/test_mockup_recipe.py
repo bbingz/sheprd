@@ -17,11 +17,16 @@ class MockupRecipeTests(unittest.TestCase):
             invocation.mkdir()
             bin_dir = root / "bin"
             bin_dir.mkdir()
-            app = root / "target/debug/sheprd"
+            # A machine-local .cargo/config.toml may move Cargo's target
+            # directory out of the checkout; the recipe asks Cargo for it.
+            target = root / "external-target"
+            app = target / "debug/sheprd"
             app.parent.mkdir(parents=True)
             cargo = bin_dir / "cargo"
             cargo.write_text(
-                '#!/bin/sh\nprintf "%s\\0" "$HERDR_MOCKUP_FILE" "$@" > "$BUILD_LOG"\n'
+                "#!/bin/sh\n"
+                f"if [ \"$1\" = metadata ]; then echo '{{\"target_directory\": \"{target}\"}}'; exit; fi\n"
+                'printf "%s\\0" "$HERDR_MOCKUP_FILE" "$@" > "$BUILD_LOG"\n'
             )
             app.write_text('#!/bin/sh\nprintf "%s\\0" "$@" > "$APP_LOG"\n')
             for executable in (cargo, app):

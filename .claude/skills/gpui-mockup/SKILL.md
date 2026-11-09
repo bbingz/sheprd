@@ -182,5 +182,5 @@ Once the user settles on a direction:
   the variants instead, or use the HTML `mockup` skill.
 - `--capture` uses GPUI's renderer readback, which works on macOS. Elsewhere it
   reports `capture failed`.
-- `just mockup` writes `target/debug/sheprd` with the `mockup` feature
-  enabled. `just run-debug` and tests rebuild their own binaries.
+- `just mockup` writes `debug/sheprd` in Cargo's target directory (`target/`
+  unless a local Cargo config moves it) with the `mockup` feature enabled. `just run-debug` and tests rebuild their own binaries.

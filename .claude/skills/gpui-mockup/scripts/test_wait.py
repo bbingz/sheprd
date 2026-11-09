@@ -133,6 +133,25 @@ class WaitTests(unittest.TestCase):
         self.assertEqual(self.run_wait().returncode, 4)
         self.assertFalse((self.root / "called").exists())
 
+    def test_app_is_found_in_cargos_configured_target_directory(self):
+        # A machine-local .cargo/config.toml may move Cargo's target directory
+        # out of the checkout, so wait.sh asks Cargo where `just mockup` built.
+        target = self.root / "external-target"
+        (target / "debug").mkdir(parents=True)
+        (self.root / "target/debug/sheprd").replace(target / "debug/sheprd")
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        cargo = bin_dir / "cargo"
+        cargo.write_text(
+            "#!/bin/sh\n"
+            f"printf '{{\"target_directory\": \"%s\"}}\\n' {sh_quote(target.as_posix())}\n"
+        )
+        cargo.chmod(0o700)
+        self.env["PATH"] = f"{bin_dir}{os.pathsep}{self.env['PATH']}"
+        result = self.run_wait(mode="notes")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "Picked: B\n")
+
     def test_older_app_wait_does_not_hide_fallback_send(self):
         # Older apps accept browser.feedback but reject notes.send, so the
         # mockup writes its fallback while the feedback request is still open.
